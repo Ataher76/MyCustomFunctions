@@ -1,37 +1,21 @@
-# Load required libraries
-if (!requireNamespace("ggplot2", quietly = TRUE)) install.packages("ggplot2")
-if (!requireNamespace("readxl", quietly = TRUE)) install.packages("readxl")
-library(ggplot2)
-library(readxl)
 
-# Universal Length-Weight Regression Function
-lw_reg <- function(data, length_col = "Length", weight_col = "Weight", 
-                   xlab = "log Length (cm)", ylab = "log Weight (g)", 
-                   main = "Log-Log Length-Weight Plot") {
+# Define the custom function using the first and second columns
+LWRelation <- function(data) {
   
-  # Check if data has the specified length and weight columns
-  if (!all(c(length_col, weight_col) %in% colnames(data))) {
-    stop("The data must have the specified 'Length' and 'Weight' columns.")
-  }
-  
-  # Rename the specified columns to standard names for easier use in the function
-  lwdata <- data[, c(length_col, weight_col)]
-  colnames(lwdata) <- c("Length", "Weight")
-  
-  # Check for any zero or negative values in Length or Weight
-  if (any(lwdata$Length <= 0) | any(lwdata$Weight <= 0)) {
-    stop("Length and Weight must be positive values for log transformation.")
+  # Check if the data has at least two columns
+  if (ncol(data) < 2) {
+    stop("The data must have at least two columns: one for length and one for weight.")
   }
   
   # Fit the linear model (log-log transformation)
-  mod <- lm(log(Weight) ~ log(Length), data = lwdata)
+  mod <- lm(log(data[[2]]) ~ log(data[[1]]))
   
   # Print the summary of the model
   print(summary(mod))
   
   # Extract the coefficients (Intercept and Slope)
   intercept <- coef(mod)["(Intercept)"]
-  slope <- coef(mod)["log(Length)"]
+  slope <- coef(mod)["log(data[[1]])"]
   
   # Calculate the actual values of a and b
   b <- slope  # b is the slope in the log-log model
@@ -42,11 +26,11 @@ lw_reg <- function(data, length_col = "Length", weight_col = "Weight",
   cat("Estimated b (Slope):", b, "\n")
   
   # Plot the original data in log-log scale
-  plot(log(lwdata$Length), log(lwdata$Weight), pch=15, col="black", 
-       xlab=xlab, ylab=ylab, main=main)
+  plot(log(data[[1]]), log(data[[2]]), pch=15, col="black", 
+       xlab="log Length (cm)", ylab="log Weight (g)", main="Log-Log Length-Weight Plot")
   
   # Generate a sequence of log(Length) values for plotting the fitted line
-  length_range_log <- seq(min(log(lwdata$Length)), max(log(lwdata$Length)), length.out = 100)
+  length_range_log <- seq(min(log(data[[1]])), max(log(data[[1]])), length.out = 100)
   
   # Calculate the corresponding log(Weight) values for the fitted line
   fitted_log_weight <- intercept + slope * length_range_log
@@ -61,3 +45,4 @@ lw_reg <- function(data, length_col = "Length", weight_col = "Weight",
   # Return the model object and coefficients
   return(list(model = mod, a = a, b = b))
 }
+
