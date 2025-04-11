@@ -1,48 +1,131 @@
-
-# Define the custom function using the first and second columns
-LWRelation <- function(data) {
+#' Plot and Model Length-Weight Relationships with Optional Log Transformation
+#'
+#' This function visualizes and models the relationship between length and weight 
+#' (or any two continuous variables) using linear regression. It supports both 
+#' standard and log-log transformations. The plot includes a fitted line, 
+#' optional confidence shading, and displays the regression equation, R², and p-value.
+#'
+#' @param data A data frame with at least two columns: the first for length, the second for weight.
+#' @param log_transform Logical. Whether to apply a log-log transformation to the variables. Default is \code{TRUE}.
+#' @param pch Plotting character for data points. Default is \code{15}.
+#' @param shade Logical. Whether to add a shaded confidence interval around the fitted line. Default is \code{TRUE}.
+#' @param point_col Color of the points. Default is \code{"black"}.
+#' @param line_col Color of the regression line. Default is \code{"red"}.
+#' @param shade_col Color for the confidence interval polygon. Default is semi-transparent red.
+#' @param lwd Line width of the regression line. Default is \code{2}.
+#' @param legend_show Logical. Whether to show the legend. Default is \code{TRUE}.
+#' @param main Title of the plot. Default is \code{"Length-Weight Relationship"}.
+#' @param xlab Optional. Custom x-axis label. If \code{NULL}, a label will be generated.
+#' @param ylab Optional. Custom y-axis label. If \code{NULL}, a label will be generated.
+#'
+#' @return A list containing:
+#' \item{model}{The fitted \code{lm} object}
+#' \item{intercept}{The estimated intercept}
+#' \item{slope}{The estimated slope}
+#' \item{r_squared}{R-squared value}
+#' \item{correlation_r}{Correlation coefficient (r)}
+#' \item{p_value}{P-value for slope}
+#'
+#' @examples
+#' \dontrun{
+#' LWRelation(mydata, log_transform = TRUE)
+#' LWRelation(mydata, log_transform = FALSE, legend_show = FALSE)
+#' }
+#'
+#' @export
+LWRelation <- function(data,
+                       log_transform = TRUE,
+                       pch = 15,
+                       shade = TRUE,
+                       point_col = "black",
+                       line_col = "red",
+                       shade_col = rgb(1, 0, 0, alpha = 0.2),
+                       lwd = 2,
+                       legend_show = TRUE,
+                       main = "Length-Weight Relationship",
+                       xlab = NULL,
+                       ylab = NULL) {
   
-  # Check if the data has at least two columns
-  if (ncol(data) < 2) {
-    stop("The data must have at least two columns: one for length and one for weight.")
+  if (ncol(data) < 2) stop("Data must have at least two columns.")
+  
+  x_raw <- data[[1]]
+  y_raw <- data[[2]]
+  
+  if (log_transform) {
+    x <- log(x_raw)
+    y <- log(y_raw)
+    xlab <- xlab %||% paste0("log(", names(data)[1], ")")
+    ylab <- ylab %||% paste0("log(", names(data)[2], ")")
+  } else {
+    x <- x_raw
+    y <- y_raw
+    xlab <- xlab %||% names(data)[1]
+    ylab <- ylab %||% names(data)[2]
   }
   
-  # Fit the linear model (log-log transformation)
-  mod <- lm(log(data[[2]]) ~ log(data[[1]]))
+  model <- lm(y ~ x)
+  a <- if (log_transform) round(exp(coef(model)[1]), 4) else round(coef(model)[1], 4)
+  b <- round(coef(model)[2], 4)
+  p_value <- signif(summary(model)$coefficients[2, 4], 4)
+  r_squared <- round(summary(model)$r.squared, 4)
+  correlation_r <- round(sqrt(r_squared), 4)
   
-  # Print the summary of the model
-  print(summary(mod))
+  x_seq <- seq(min(x), max(x), length.out = 100)
+  newdata <- data.frame(x = x_seq)
+  preds <- predict(model, newdata, interval = "confidence")
   
-  # Extract the coefficients (Intercept and Slope)
-  intercept <- coef(mod)["(Intercept)"]
-  slope <- coef(mod)["log(data[[1]])"]
+  plot(x, y, pch = pch, col = point_col, xlab = xlab, ylab = ylab, main = main)
   
-  # Calculate the actual values of a and b
-  b <- slope  # b is the slope in the log-log model
-  a <- exp(intercept)  # a is exp(intercept) because log(a) = intercept
+  if (shade) {
+    polygon(c(x_seq, rev(x_seq)), c(preds[, "lwr"], rev(preds[, "upr"])), 
+            col = shade_col, border = NA)
+  }
   
-  # Print the coefficients a and b
-  cat("Estimated a (Intercept):", a, "\n")
-  cat("Estimated b (Slope):", b, "\n")
+  lines(x_seq, preds[, "fit"], col = line_col, lwd = lwd)
   
-  # Plot the original data in log-log scale
-  plot(log(data[[1]]), log(data[[2]]), pch=15, col="black", 
-       xlab="log Length (cm)", ylab="log Weight (g)", main="Log-Log Length-Weight Plot")
+  # Equation text
+  eqn <- if (log_transform) {
+    paste0("W = ", a, " L^", b)
+  } else {
+    paste0("y = ", a, " + ", b, "x")
+  }
+  r_text <- paste0("R² = ", r_squared)
+  p_text <- paste0("p = ", p_value)
   
-  # Generate a sequence of log(Length) values for plotting the fitted line
-  length_range_log <- seq(min(log(data[[1]])), max(log(data[[1]])), length.out = 100)
+  # Positioning annotation in top-left corner
+  usr <- par("usr")  # get plot limits
+  text_x <- usr[1] + 0.05 * (usr[2] - usr[1])
+  text_y <- usr[4] - 0.05 * (usr[4] - usr[3])
+  line_spacing <- 0.07 * (usr[4] - usr[3])
   
-  # Calculate the corresponding log(Weight) values for the fitted line
-  fitted_log_weight <- intercept + slope * length_range_log
+  text(text_x, text_y, eqn, pos = 4, cex = 0.9)
+  text(text_x, text_y - line_spacing, r_text, pos = 4, cex = 0.9)
+  text(text_x, text_y - 2 * line_spacing, p_text, pos = 4, cex = 0.9)
   
-  # Plot the fitted line
-  lines(length_range_log, fitted_log_weight, col="red", lwd=2)
+  # Legend
+  if (legend_show) {
+    legend("bottomright", legend = c("Observed", "Fit", "95% CI"),
+           col = c(point_col, line_col, shade_col),
+           pch = c(pch, NA, 15), lty = c(NA, 1, NA), pt.cex = c(1, NA, 2), bty = "n")
+  }
   
-  # Add legend
-  legend("topleft", legend=c("Observed Data", "Fitted Line"), 
-         col=c("black", "red"), pch=c(15, NA), lty=c(NA, 1))
-  
-  # Return the model object and coefficients
-  return(list(model = mod, a = a, b = b))
+  return(list(
+    model = model,
+    intercept = a,
+    slope = b,
+    r_squared = r_squared,
+    correlation_r = correlation_r,
+    p_value = p_value
+  ))
 }
+
+# Internal helper for null-coalesce
+`%||%` <- function(a, b) if (!is.null(a)) a else b
+
+
+
+check <- iris %>% select(1,4)
+
+LWRelation(data = check, pch = 4, shade = T, main = NULL, log_transform = F, legend_show = F)
+
 
